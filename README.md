@@ -133,29 +133,29 @@ $ git cherry-pick --continue
   # ファイル編集画面が開くが、編集せず終了する。
 ```
 
-### (7) scripts/fujitsu/env.srcを修正する。
+#### (7) scripts/fujitsu/env.srcを修正する。
 - 46行目を有効化し、コンパイラの版数としてtcsds-1.2.38を指定する。
 - 47行目をコメントアウトする。
 - 48、49行目のvenvとprefixのパスを適宜修正する。
 
-### (8) scripts/fujitsu/3_venv.shを修正する。
+#### (8) scripts/fujitsu/3_venv.shを修正する。
 ```
 $ sed -i -e "s/pip future six wheel/pip/g" 3_venv.sh
 ```
 
-### (9) scripts/fujitsu/4_numpy_scipy.shを修正する。
+#### (9) scripts/fujitsu/4_numpy_scipy.shを修正する。
 ```
 $ sed -i -e "s/Cython>=0.29.30/Cython>=0.29.30,<3.0/g" 4_numpy_scipy.sh
 ```
 
-### (10) scripts/fujitsu/5_pytorch.shを修正する。
+#### (10) scripts/fujitsu/5_pytorch.shを修正する。
 ```
 $ sed -i -e "s/ONEDNN_VER=v2.7/ONEDNN_VER=v3.1.1/g" 5_pytorch.sh
 $ sed -i -e "s%/third_party/oneDNN%%g" 5_pytorch.sh
 $ sed -i -e "s/CFLAGS=-O3/WITH_BLAS=ssl2 CFLAGS='-O3 -Kopenmp'/g" 5_pytorch.sh
 ```
 
-### (11) 富士通コンパイラでのエラー回避のためpatch(pytorch21_q8gemm_sparse.ptach)を適用する。
+#### (11) 富士通コンパイラでのエラー回避のためpatch(pytorch21_q8gemm_sparse.ptach)を適用する。
 ```
 $ pwd
 (somewhere)/ pytorch
@@ -163,12 +163,12 @@ $ cd aten/src/ATen/native/quantized/cpu/qnnpack/src/q8gemm_sparse
 $ patch -p1 -i (somewhere)/pytorch21_q8gemm_sparse.ptach
 ```
 
-### (12) scripts/fujitsu/6_vision.shを修正する。PyTorchの版数に合わせてVisionをv1.16.0に変更する。
+#### (12) scripts/fujitsu/6_vision.shを修正する。PyTorchの版数に合わせてVisionをv1.16.0に変更する。
 ```
 $ sed -i -e "s/TORCHVISION_VER=v0.14.1/TORCHVISION_VER=v0.16.0/g" 6_vision.sh
 ```
 
-### (13) Visionの版数の変更に伴い、scripts/fujitsu/vision.patchを以下の通り修正する。
+#### (13) Visionの版数の変更に伴い、scripts/fujitsu/vision.patchを以下の通り修正する。
 - vision.patchの修正前
 ```
 144 -   // we want to precalculate indices and weights shared by all chanels,
@@ -178,7 +178,7 @@ $ sed -i -e "s/TORCHVISION_VER=v0.14.1/TORCHVISION_VER=v0.16.0/g" 6_vision.sh
 144 -   // we want to precalculate indices and weights shared by all channels,
 ```
 
-### (14) scripts/fujitsu/horovod.patchを以下の通り、C++17向けのパッチをmpi_ops.pyの行の間に挿入する。
+#### (14) scripts/fujitsu/horovod.patchを以下の通り、C++17向けのパッチをmpi_ops.pyの行の間に挿入する。
 - horovod.patchの修正後
 ```
 62
@@ -200,4 +200,68 @@ $ sed -i -e "s/TORCHVISION_VER=v0.14.1/TORCHVISION_VER=v0.16.0/g" 6_vision.sh
 78 diff --git a/horovod/torch/mpi_ops.py b/horovod/torch/mpi_ops.py
 ```
 
-## ビルド手順
+### ビルド手順
+2.2 ビルド環境の整備が完了後、会話型ジョブにより以下の手順でビルドする。
+```
+$ cd (somewhere)/pytorch/scripts/fujitsu
+
+$ bash 1_python.sh
+$ bash 3_venv.sh
+$ bash 4_numpy_scipy.sh
+$ bash 5_pytorch.sh
+$ bash 6_vision.sh 
+$ bash 7_horovod.sh 
+$ bash 8_libtcmalloc.sh
+```
+
+ビルド用のスクリプトの実行後に出力されるpip3 list(pip3_list.txt)の内容を示す。
+```
+Package            Version
+------------------ ------------------
+astunparse         1.6.3
+attrs              23.2.0
+beniget            0.4.1
+certifi            2024.2.2
+cffi               1.16.0
+charset-normalizer 3.3.2
+cloudpickle        3.0.0
+Cython             0.29.37
+exceptiongroup     1.2.0
+expecttest         0.2.1
+filelock           3.13.1
+fsspec             2024.2.0
+gast               0.5.4
+horovod            0.26.1
+hypothesis         6.99.6
+idna               3.6
+iniconfig          2.0.0
+Jinja2             3.1.3
+MarkupSafe         2.1.5
+mpmath             1.3.0
+networkx           3.2.1
+numpy              1.22.4
+packaging          24.0
+Pillow             7.2.0
+pip                23.0.1
+pluggy             1.4.0
+ply                3.11
+psutil             5.9.8
+pybind11           2.11.1
+pycparser          2.21
+pytest             8.1.1
+pythran            0.15.0
+PyYAML             6.0.1
+requests           2.31.0
+SciPy              1.7.3
+setuptools         69.2.0
+six                1.16.0
+sortedcontainers   2.4.0
+sympy              1.12
+tomli              2.0.1
+torch              2.1.0a0+gitd886a2e
+torchvision        0.16.0+fbb4cc5
+types-dataclasses  0.6.6
+typing_extensions  4.10.0
+urllib3            2.2.1
+wheel              0.43.0
+```
