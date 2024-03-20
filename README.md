@@ -71,6 +71,7 @@ $ git status
 ```
 
 git statusで出力されるマージされていない2つのファイルを以下の通り修正する。
+
 **1. cmake/Dependencies.cmakeの修正**
 - 238、243、258行目を削除
 - 281行目の”OR FlexiBLAS_FOUND”の後に” OR SSL2_FOUND”を追加する
