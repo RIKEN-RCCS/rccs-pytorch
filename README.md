@@ -265,3 +265,244 @@ typing_extensions  4.10.0
 urllib3            2.2.1
 wheel              0.43.0
 ```
+
+### 標準的なテストデータ(mnist)を用いた動作確認 
+
+ビルドしたPyTorch v2.1の動作確認では、機械学習の画像認識の学習においてサンプルデータ
+としてよく利用される「mnist」を用いた。
+mnistを実行するコードは公式PyTorchのgithubのexamplesから入手した。
+(https://github.com/pytorch/examples/blob/main/mnist/main.py)
+また、mnistのコードを実行するスクリプトにはscripts/fujitsu/run1proc.shを流用した。
+
+#### mnistの実行環境の構築
+
+scripts/fujitsu/配下に以下のmnistコード(mnist.py)と実行用スクリプト(run1proc_mnist.sh)を作る。
+
+- mnist.py
+```
+from __future__ import print_function
+import argparse
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+from torchvision import datasets, transforms
+from torch.optim.lr_scheduler import StepLR
+
+
+class Net(nn.Module):
+    def __init__(self):
+        super(Net, self).__init__()
+        self.conv1 = nn.Conv2d(1, 32, 3, 1)
+        self.conv2 = nn.Conv2d(32, 64, 3, 1)
+        self.dropout1 = nn.Dropout(0.25)
+        self.dropout2 = nn.Dropout(0.5)
+        self.fc1 = nn.Linear(9216, 128)
+        self.fc2 = nn.Linear(128, 10)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = F.relu(x)
+        x = self.conv2(x)
+        x = F.relu(x)
+        x = F.max_pool2d(x, 2)
+        x = self.dropout1(x)
+        x = torch.flatten(x, 1)
+        x = self.fc1(x)
+        x = F.relu(x)
+        x = self.dropout2(x)
+        x = self.fc2(x)
+        output = F.log_softmax(x, dim=1)
+        return output
+
+
+def train(args, model, device, train_loader, optimizer, epoch):
+    model.train()
+    for batch_idx, (data, target) in enumerate(train_loader):
+        data, target = data.to(device), target.to(device)
+        optimizer.zero_grad()
+        output = model(data)
+        loss = F.nll_loss(output, target)
+        loss.backward()
+        optimizer.step()
+        if batch_idx % args.log_interval == 0:
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                epoch, batch_idx * len(data), len(train_loader.dataset),
+                100. * batch_idx / len(train_loader), loss.item()))
+            if args.dry_run:
+                break
+
+
+def test(model, device, test_loader):
+    model.eval()
+    test_loss = 0
+    correct = 0
+    with torch.no_grad():
+        for data, target in test_loader:
+            data, target = data.to(device), target.to(device)
+            output = model(data)
+            test_loss += F.nll_loss(output, target, reduction='sum').item()  # sum up batch loss
+            pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
+            correct += pred.eq(target.view_as(pred)).sum().item()
+
+    test_loss /= len(test_loader.dataset)
+
+    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
+        test_loss, correct, len(test_loader.dataset),
+        100. * correct / len(test_loader.dataset)))
+
+
+def main():
+    # Training settings
+    parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
+    parser.add_argument('--batch-size', type=int, default=64, metavar='N',
+                        help='input batch size for training (default: 64)')
+    parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
+                        help='input batch size for testing (default: 1000)')
+    parser.add_argument('--epochs', type=int, default=14, metavar='N',
+                        help='number of epochs to train (default: 14)')
+    parser.add_argument('--lr', type=float, default=1.0, metavar='LR',
+                        help='learning rate (default: 1.0)')
+    parser.add_argument('--gamma', type=float, default=0.7, metavar='M',
+                        help='Learning rate step gamma (default: 0.7)')
+    parser.add_argument('--no-cuda', action='store_true', default=False,
+                        help='disables CUDA training')
+    parser.add_argument('--no-mps', action='store_true', default=False,
+                        help='disables macOS GPU training')
+    parser.add_argument('--dry-run', action='store_true', default=False,
+                        help='quickly check a single pass')
+    parser.add_argument('--seed', type=int, default=1, metavar='S',
+                        help='random seed (default: 1)')
+    parser.add_argument('--log-interval', type=int, default=10, metavar='N',
+                        help='how many batches to wait before logging training status')
+    parser.add_argument('--save-model', action='store_true', default=False,
+                        help='For Saving the current Model')
+    args = parser.parse_args()
+    use_cuda = not args.no_cuda and torch.cuda.is_available()
+    use_mps = not args.no_mps and torch.backends.mps.is_available()
+
+    torch.manual_seed(args.seed)
+
+    if use_cuda:
+        device = torch.device("cuda")
+    elif use_mps:
+        device = torch.device("mps")
+    else:
+        device = torch.device("cpu")
+
+    train_kwargs = {'batch_size': args.batch_size}
+    test_kwargs = {'batch_size': args.test_batch_size}
+    if use_cuda:
+        cuda_kwargs = {'num_workers': 1,
+                       'pin_memory': True,
+                       'shuffle': True}
+        train_kwargs.update(cuda_kwargs)
+        test_kwargs.update(cuda_kwargs)
+
+    transform=transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.1307,), (0.3081,))
+        ])
+    dataset1 = datasets.MNIST('../data', train=True, download=True,
+                       transform=transform)
+    dataset2 = datasets.MNIST('../data', train=False,
+                       transform=transform)
+    train_loader = torch.utils.data.DataLoader(dataset1,**train_kwargs)
+    test_loader = torch.utils.data.DataLoader(dataset2, **test_kwargs)
+
+    model = Net().to(device)
+    optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
+
+    scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
+    for epoch in range(1, args.epochs + 1):
+        train(args, model, device, train_loader, optimizer, epoch)
+        test(model, device, test_loader)
+        scheduler.step()
+
+    if args.save_model:
+        torch.save(model.state_dict(), "mnist_cnn.pt")
+
+
+if __name__ == '__main__':
+    main()
+```
+
+- run1proc_mnist.sh
+```
+#! /bin/bash
+
+set -euo pipefail
+
+script_basedir=$(cd $(dirname $0); pwd)
+source $script_basedir/env.src
+[ -v VENV_PATH ] && source $VENV_PATH/bin/activate
+
+set -x
+
+#export OMP_PROC_BIND=false
+export OMP_NUM_THREADS=48
+
+# For oneDNN debug
+# Output debug message (CSV) to stdout.
+# The message begin with 'dnnl_verbose,' which is the first entry in CSV.
+#export DNNL_VERBOSE=1                  #  0: (no output), 1: (exec), 2: (1 + cache hit/miss)
+#export DNNL_VERBOSE_TIMESTAMP=1
+
+ulimit -s 8192
+
+if [ ${PMIX_RANK:-0} -eq 0 ]; then
+    env
+    pip3 list
+    KMP_SETTINGS=1 python3 -c "import torch; print(torch.__version__); print(torch.__config__.show()); print(torch.__config__.parallel_info())"
+fi
+
+LD_PRELOAD=$PREFIX/lib/libtcmalloc.so python3 -u mnist.py --epoch 2 --no-cuda --no-mps
+```
+
+#### mnistの実行
+対話型ジョブにより計算ノードから以下のコマンドでmnistを実行する。
+```
+$ cd (somewhere)/pytorch/scripts/Fujitsu
+$ bash run1proc_mnist.sh
+```
+
+以下の出力によりmnistがPyTorch v2.1で正常に動作していることを確認した。
+
+```
+Downloading http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz
+Downloading http://yann.lecun.com/exdb/mnist/train-images-idx3-ubyte.gz to ../data/MNIST/raw/train-images-idx3-ubyte.gz
+100.0%
+Extracting ../data/MNIST/raw/train-images-idx3-ubyte.gz to ../data/MNIST/raw
+　　　　　　　　　　　　　　:
+Extracting ../data/MNIST/raw/t10k-labels-idx1-ubyte.gz to ../data/MNIST/raw
+
+Train Epoch: 1 [0/60000 (0%)]   Loss: 2.329474
+Train Epoch: 1 [640/60000 (1%)] Loss: 1.425025
+Train Epoch: 1 [1280/60000 (2%)]        Loss: 0.797880
+Train Epoch: 1 [1920/60000 (3%)]        Loss: 0.536058
+Train Epoch: 1 [2560/60000 (4%)]        Loss: 0.438659
+Train Epoch: 1 [3200/60000 (5%)]        Loss: 0.272091
+                            :
+Train Epoch: 1 [56960/60000 (95%)]      Loss: 0.028683
+Train Epoch: 1 [57600/60000 (96%)]      Loss: 0.158729
+Train Epoch: 1 [58240/60000 (97%)]      Loss: 0.003202
+Train Epoch: 1 [58880/60000 (98%)]      Loss: 0.009425
+Train Epoch: 1 [59520/60000 (99%)]      Loss: 0.003038
+
+Test set: Average loss: 0.0458, Accuracy: 9840/10000 (98%)
+
+Train Epoch: 2 [0/60000 (0%)]   Loss: 0.024910
+Train Epoch: 2 [640/60000 (1%)] Loss: 0.025748
+Train Epoch: 2 [1280/60000 (2%)]        Loss: 0.074290
+Train Epoch: 2 [1920/60000 (3%)]        Loss: 0.184948
+Train Epoch: 2 [2560/60000 (4%)]        Loss: 0.053342
+Train Epoch: 2 [3200/60000 (5%)]        Loss: 0.025564
+                            :
+Train Epoch: 2 [56960/60000 (95%)]      Loss: 0.032589
+Train Epoch: 2 [57600/60000 (96%)]      Loss: 0.136949
+Train Epoch: 2 [58240/60000 (97%)]      Loss: 0.031606
+Train Epoch: 2 [58880/60000 (98%)]      Loss: 0.005720
+Train Epoch: 2 [59520/60000 (99%)]      Loss: 0.002099
+
+Test set: Average loss: 0.0370, Accuracy: 9870/10000 (99%)
+```
