@@ -156,6 +156,7 @@ $ sed -i -e "s/CFLAGS=-O3/WITH_BLAS=ssl2 CFLAGS='-O3 -Kopenmp'/g" 5_pytorch.sh
 ```
 
 #### (11) 富士通コンパイラでのエラー回避のためpatch(pytorch21_q8gemm_sparse.ptach)を適用する。
+PATCH/ディレクトリに格納されているパッチファイル(pytorch21_q8gemm_sparse.ptach)をビルド環境にコピーする。
 ```
 $ pwd
 (somewhere)/ pytorch
