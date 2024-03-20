@@ -29,3 +29,53 @@
 ```
 $ git clone https://github.com/fujitsu/pytorch.git
 ```
+
+#### (2) pytorch/ディレクトリへ移動し、公式PyTorchのリポジトリを認識する。
+
+```
+$ cd pytorch
+$ git remote add upstream https://github.com/pytorch/pytorch.git
+$ git fetch upstream v2.1.0
+```
+
+#### (3) 公式v2.1.0をベースに新しいブランチを作成する。
+
+```
+$ git checkout -b r2.1.0_for_a64fx FETCH_HEAD
+```
+
+#### (4) 富士通PyTorch v1.13.1から、ビルド用スクリプト一式を取り込む。
+
+```
+$ git cherry-pick 17afed104f0a2ac47bab78aebf584fb3c578e707
+$ git reset --mixed HEAD^
+$ git add scripts/fujitsu --all
+$ git commit -m "add fujitsu/script"
+```
+
+#### (5) ２つの富士通コンパイラ向けのブランチをcherry-pickする。
+１つ目では、8x8c1x4-dq-packedA-aarch64-neon.Sへの修正を取り込む。
+```
+$ git cherry-pick e81f6c00acef2cebaaca9e5085fa6a2b0181ecd4
+$ git checkout --theirs aten/src/ATen/native/quantized/cpu/qnnpack/src/q8gemm_sparse/8x8c1x4-dq-packedA-aarch64-neon.S
+$ git add aten/src/ATen/native/quantized/cpu/qnnpack/src/q8gemm_sparse/8x8c1x4-dq-packedA-aarch64-neon.S
+$ git cherry-pick --continue 
+  # ファイル編集画面が開くが、編集せず終了する。
+```
+
+2つ目では、cmakeへの修正を取り込む。
+```
+$ git cherry-pick 2f85b96ce569a8e60eb1627746fba3ee8ba12a57
+$ git status
+  # マージされていない2つのファイルを修正する。
+```
+
+git statusで出力されるマージされていない2つのファイルを以下の通り修正する。
+1. cmake/Dependencies.cmakeの修正
+- 238、243、258行目を削除
+- 281行目の”OR FlexiBLAS_FOUND”の後に” OR SSL2_FOUND”を追加する
+- 280、282、283、284行目を削除
+
+2. cmake/Modules/FindOpenMP.cmake
+- 262、266、278行目を削除
+
