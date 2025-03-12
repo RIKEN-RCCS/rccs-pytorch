@@ -1,0 +1,102 @@
+diff --git a/numpy/distutils/fcompiler/__init__.py b/numpy/distutils/fcompiler/__init__.py
+index d8dcfa8..ebe0647 100644
+--- a/numpy/distutils/fcompiler/__init__.py
++++ b/numpy/distutils/fcompiler/__init__.py
+@@ -745,7 +745,7 @@ def wrap_unlinkable_objects(self, objects, output_dir, extra_dll_dir):
+     ('cygwin.*', ('gnu', 'intelv', 'absoft', 'compaqv', 'intelev', 'gnu95', 'g95')),
+     ('linux.*', ('arm', 'gnu95', 'intel', 'lahey', 'pg', 'nv', 'absoft', 'nag',
+                  'vast', 'compaq', 'intele', 'intelem', 'gnu', 'g95', 
+-                 'pathf95', 'nagfor', 'fujitsu')),
++                 'pathf95', 'nagfor', 'fujitsu', 'llvm')),
+     ('darwin.*', ('gnu95', 'nag', 'nagfor', 'absoft', 'ibm', 'intel', 'gnu',
+                  'g95', 'pg')),
+     ('sunos.*', ('sun', 'gnu', 'gnu95', 'g95')),
+diff --git a/numpy/distutils/fcompiler/llvm.py b/numpy/distutils/fcompiler/llvm.py
+new file mode 100644
+index 0000000..f3db492
+--- /dev/null
++++ b/numpy/distutils/fcompiler/llvm.py
+@@ -0,0 +1,71 @@
++from __future__ import division, absolute_import, print_function
++                                                                               
++import sys                                                                     
++                                                                               
++from numpy.distutils.fcompiler import FCompiler, dummy_fortran_file
++from sys import platform                                                       
++from os.path import join, dirname, normpath
++
++compilers = ['LlvmFlangFCompiler']
++
++import functools
++
++class LlvmFlangFCompiler(FCompiler):
++    compiler_type = 'llvm'
++    description = 'LLVM Fortran Compiler'
++    version_pattern = r'\s*flang.*version (?P<version>[\d.-]+).*'
++
++    possible_executables = ['flang']
++
++    executables = {
++        'version_cmd': ["", "--version"],
++        'compiler_f77': ["flang", "-fPIC"],
++        'compiler_fix': ["flang", "-fPIC", "-ffixed-form"],
++        'compiler_f90': ["flang", "-fPIC"],
++        'linker_so': ["flang", "-fPIC", "-shared"],
++        'archiver': ["ar", "-cr"],
++        'ranlib':  None
++    }
++
++    pic_flags = ["-fPIC", "-DPIC"]
++    c_compiler = 'clang'
++    module_dir_switch = '-module '  # Don't remove ending space!
++
++    def get_libraries(self):
++        opt = FCompiler.get_libraries(self)
++        return opt
++
++    @functools.lru_cache(maxsize=128)
++    def get_library_dirs(self):
++        """List of compiler library directories."""
++        opt = FCompiler.get_library_dirs(self)
++        flang_dir = dirname(self.executables['compiler_f77'][0])
++        opt.append(normpath(join(flang_dir, '..', 'lib')))
++
++        return opt
++
++    def get_flags(self):
++        return []
++
++    def get_flags_free(self):
++        return []
++
++    def get_flags_debug(self):
++        return ['-g']
++
++    def get_flags_opt(self):
++        return ['-O3']
++
++    def get_flags_arch(self):
++        return []
++
++    def runtime_library_dir_option(self, dir):
++        return '-Wl,-rpath=%s' % dir
++
++
++if __name__ == '__main__':
++    from distutils import log
++    log.set_verbosity(2)
++    from numpy.distutils import customized_fcompiler
++    print(customized_fcompiler(compiler='llvm').get_version())
++
+diff --git a/numpy/tests/test_public_api.py b/numpy/tests/test_public_api.py
+index bb15e10..9369424 100644
+--- a/numpy/tests/test_public_api.py
++++ b/numpy/tests/test_public_api.py
+@@ -233,6 +233,7 @@ def test_NPY_NO_EXPORT():
+     "distutils.fcompiler.sun",
+     "distutils.fcompiler.vast",
+     "distutils.fcompiler.fujitsu",
++    "distutils.fcompiler.llvm",
+     "distutils.from_template",
+     "distutils.intelccompiler",
+     "distutils.lib2def",
