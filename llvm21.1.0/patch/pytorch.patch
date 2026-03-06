@@ -1,0 +1,997 @@
+diff --git a/caffe2/CMakeLists.txt b/caffe2/CMakeLists.txt
+index 6ab41b6c84..61a0cd2f9e 100644
+--- a/caffe2/CMakeLists.txt
++++ b/caffe2/CMakeLists.txt
+@@ -1549,7 +1549,8 @@ target_link_libraries(torch_cpu PUBLIC ${Caffe2_PUBLIC_DEPENDENCY_LIBS})
+ target_link_libraries(torch_cpu PRIVATE ${Caffe2_DEPENDENCY_LIBS})
+ target_link_libraries(torch_cpu PRIVATE ${Caffe2_DEPENDENCY_WHOLE_LINK_LIBS})
+ if(USE_MPI)
+-  target_link_libraries(torch_cpu PRIVATE MPI::MPI_CXX)
++  target_link_libraries(torch_cpu PRIVATE ${MPI_CXX_LIBRARIES})
++  target_include_directories(torch_cpu PRIVATE ${MPI_CXX_INCLUDE_PATH})
+ endif()
+ target_include_directories(torch_cpu INTERFACE $<INSTALL_INTERFACE:include>)
+ target_include_directories(torch_cpu PRIVATE ${Caffe2_CPU_INCLUDE})
+@@ -1727,7 +1728,8 @@ if(BUILD_SHARED_LIBS)
+   endif()
+   set_target_properties(torch_global_deps PROPERTIES LINKER_LANGUAGE C)
+   if(USE_MPI)
+-    target_link_libraries(torch_global_deps MPI::MPI_CXX)
++    target_link_libraries(torch_global_deps ${MPI_CXX_LIBRARIES})
++    target_include_directories(torch_global_deps PUBLIC ${MPI_CXX_INCLUDE_PATH})
+   endif()
+   if(CAFFE2_USE_MKL)
+     target_link_libraries(torch_global_deps caffe2::mkl)
+diff --git a/cmake/Modules/FindARM.cmake b/cmake/Modules/FindARM.cmake
+index 903025c5c2..a419c1aeed 100644
+--- a/cmake/Modules/FindARM.cmake
++++ b/cmake/Modules/FindARM.cmake
+@@ -153,7 +153,7 @@ IF(CMAKE_SYSTEM_NAME MATCHES "Linux")
+ 
+     # Check for SVE256 vector length
+     CHECK_COMPILES(CXX "SVE256" "-march=armv8.2-a+sve -msve-vector-bits=256" "${SVE_CODE}")
+-    CHECK_COMPILES(CXX "ARM_BF16" "-march=armv8.2-a+sve+bf16 -msve-vector-bits=256" "${ARM_BF16_CODE}")
++    #CHECK_COMPILES(CXX "ARM_BF16" "-march=armv8.2-a+sve+bf16 -msve-vector-bits=256" "${ARM_BF16_CODE}")
+ 
+     # If SVE256 support is not found, set CXX_SVE_FOUND to FALSE and notify the user
+     if(NOT CXX_SVE256_FOUND)
+diff --git a/cmake/Modules/FindMPI.cmake b/cmake/Modules/FindMPI.cmake
+new file mode 100644
+index 0000000000..cd77062a48
+--- /dev/null
++++ b/cmake/Modules/FindMPI.cmake
+@@ -0,0 +1,53 @@
++if(CMAKE_C_COMPILER MATCHES ".*/clang$" AND
++    CMAKE_CXX_COMPILER MATCHES ".*/clang\\+\\+$")
++  if(DEFINED ENV{MPI_HOME})
++    set(TCSMPI_EXEC_PATH "$ENV{MPI_HOME}/bin")
++  else()
++    string(REGEX REPLACE "/clang\\+\\+$" "" CMAKE_CXX_COMPILER_DIR "${CMAKE_CXX_COMPILER}")
++    set(TCSMPI_EXEC_PATH "${CMAKE_CXX_COMPILER_DIR}")
++  endif()
++  execute_process(COMMAND "${TCSMPI_EXEC_PATH}/mpiclang++" "--show"
++    RESULT_VARIABLE MPIFCC_EXEC_RESULT
++    OUTPUT_QUIET
++    ERROR_QUIET)
++  if(MPIFCC_EXEC_RESULT EQUAL 0)
++    message(STATUS "TCS-MPI ENABLED")
++    set(MPI_CXX_FOUND ON)
++    execute_process(COMMAND "${TCSMPI_EXEC_PATH}/mpiclang++" "--showme:compile"
++      OUTPUT_VARIABLE MPI_CXX_COMPILE_FLAGS)
++    string(REPLACE "\n" "" MPI_CXX_COMPILE_FLAGS "${MPI_CXX_COMPILE_FLAGS}")
++    execute_process(COMMAND "${TCSMPI_EXEC_PATH}/mpiclang++" "--showme:incdirs"
++      OUTPUT_VARIABLE MPI_CXX_INCLUDE_PATH)
++    string(REPLACE "\n" ";" MPI_CXX_INCLUDE_PATH "${MPI_CXX_INCLUDE_PATH}")
++    execute_process(COMMAND "${TCSMPI_EXEC_PATH}/mpiclang++" "--showme:link"
++      OUTPUT_VARIABLE MPI_CXX_LINK_FLAGS)
++    string(REPLACE "\n" "" MPI_CXX_LINK_FLAGS "${MPI_CXX_LINK_FLAGS}")
++    execute_process(COMMAND "${TCSMPI_EXEC_PATH}/mpiclang++" "--showme:libdirs"
++      OUTPUT_VARIABLE MPI_CXX_LIBRARY_DIRS)
++    string(REPLACE "\n" "" MPI_CXX_LIBRARY_DIRS "${MPI_CXX_LIBRARY_DIRS}")
++    string(REPLACE " " ";" MPI_CXX_LIBRARY_DIRS "${MPI_CXX_LIBRARY_DIRS}")
++    foreach(dir IN LISTS MPI_CXX_LIBRARY_DIRS)
++      set(MPI_CXX_LIBRARIES "${dir}/libmpi.so")
++    endforeach()
++    set(MPI_FOUND ON)
++    set(MPI_C_FOUND ON)
++    set(MPIEXEC "${TCSMPI_EXEC_PATH}/mpiexec")
++    set(MPI_COMPILE_FLAGS ${MPI_CXX_COMPILE_FLAGS})
++    set(MPI_C_COMPILE_FLAGS ${MPI_CXX_COMPILE_FLAGS})
++    set(MPI_INCLUDE_PATH ${MPI_CXX_INCLUDE_PATH})
++    set(MPI_C_INCLUDE_PATH ${MPI_CXX_INCLUDE_PATH})
++    set(MPI_LINK_FLAGS ${MPI_CXX_LINK_FLAGS})
++    set(MPI_C_LINK_FLAGS ${MPI_CXX_LINK_FLAGS})
++    set(MPI_LIBRARIES ${MPI_CXX_LIBRARIES})
++    set(MPI_C_LIBRARIES ${MPI_CXX_LIBRARIES})
++  else()
++    message(STATUS "TCS-MPI DISABLED")
++  endif()
++endif()
++if(NOT MPI_FOUND)
++  set(CMAKE_MODULE_PATH_TMP "${CMAKE_MODULE_PATH}")
++  unset(CMAKE_MODULE_PATH)
++  find_package(MPI)
++  set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH_TMP}")
++  unset(CMAKE_MODULE_PATH_TMP)
++endif()
+diff --git a/scripts/fujitsu/1_python.sh b/scripts/fujitsu/1_python.sh
+index 90790698f9..98a02f52c6 100755
+--- a/scripts/fujitsu/1_python.sh
++++ b/scripts/fujitsu/1_python.sh
+@@ -39,7 +39,7 @@ source $script_basedir/env.src
+ 
+ if [ -v fjenv_debug ]; then set -x; fi
+ 
+-PYTHON_VER=3.9
++PYTHON_VER=3.10
+ PYTHON_DIR=cpython
+ 
+ #
+@@ -83,7 +83,7 @@ if [ "$fjenv_use_fcc" = "true" ]; then
+     # TODO: $ORIGIN sometimes parsed as 'RIGIN'.
+     # perhaps more backslashs are needed to protect $ORIGIN from parsing in shell.
+     # export LDFLAGS="-Wl,-rpath,\$ORIGIN/../lib"
+-    export LDFLAGS="-Wl,-rpath,${PREFIX}/lib -Wl,-rpath,${TCSDS_PATH}/lib64 -lpthread"
++    export LDFLAGS="-Wl,-rpath,${PREFIX}/lib -L/usr/lib64"
+ else
+     # Ditto.
+     #export LDFLAGS="-Wl,-rpath,\$ORIGIN/../lib"
+@@ -105,7 +105,7 @@ if [ "${fjenv_use_fcc}" = "true" ]; then
+     #   We used to link with '--linkfortran', which turned out to be unnecessary.
+     #   It was used to link with the module solery written by Fortran.
+     # ${CXX} --linkfortran -SSL2 -Kopenmp -Nlibomp -o python Programs/python.o -L. -lpython$PYTHON_VER $LDFLAGS
+-    ${CXX} -Kopenmp -Nlibomp -SSL2BLAMP -lfjlapackexsve -o python Programs/python.o -L. -lpython$PYTHON_VER $LDFLAGS
++    ${CXX} -fopenmp -L${OpenBLAS_HOME}/lib -lopenblas -lflang_rt.runtime -o python Programs/python.o -L. -lpython$PYTHON_VER $LDFLAGS
+ fi
+ 
+ make install
+@@ -119,7 +119,7 @@ hash -r
+ # Note that python 3.9 buildles setuptools 58.1.
+ #pip3 uninstall -y setuptools
+ 
+-pip3 install --upgrade ${PIP3_OPTIONS} 'setuptools>60.6.0'        # or setuptools<59.6.0
++pip3 install --upgrade ${PIP3_OPTIONS} 'setuptools==73.0.1'        # or setuptools<59.6.0
+ 
+ # Show configuration
+ 
+diff --git a/scripts/fujitsu/3_venv.sh b/scripts/fujitsu/3_venv.sh
+index b271fdc535..4169a4930d 100755
+--- a/scripts/fujitsu/3_venv.sh
++++ b/scripts/fujitsu/3_venv.sh
+@@ -81,9 +81,9 @@ fi
+ # Workaround is found in:
+ #    See https://stackoverflow.com/questions/70520120/attributeerror-module-setuptools-distutils-has-no-attribute-version
+ 
+-pip3 install --upgrade ${PIP3_OPTIONS} 'setuptools>60.6.0'        # or setuptools<59.6.0
++pip3 install --upgrade ${PIP3_OPTIONS} 'setuptools==73.0.1'        # or setuptools<59.6.0
+ 
+-pip3 install --upgrade ${PIP3_OPTIONS} pip future six wheel
++pip3 install --upgrade ${PIP3_OPTIONS} pip==25.3
+ 
+ pip3 list | tee $script_basedir/pip3_list.txt
+ 
+diff --git a/scripts/fujitsu/4_numpy_scipy.sh b/scripts/fujitsu/4_numpy_scipy.sh
+index fe07872ab3..02e52f2c7a 100755
+--- a/scripts/fujitsu/4_numpy_scipy.sh
++++ b/scripts/fujitsu/4_numpy_scipy.sh
+@@ -41,8 +41,9 @@ if [ -v fjenv_debug ]; then set -x; fi
+ 
+ NUMPY_VER=v1.22.4
+ NUMPY_DIR=numpy
+-SCIPY_VER=v1.7.3
++SCIPY_VER=v1.10.1
+ SCIPY_DIR=scipy
++SCIPY_CHERRY_PICK=ab7d08c6148286059f6498ab5c3070268d13cbd9
+ 
+ #
+ # Clean up
+@@ -61,17 +62,20 @@ fi
+ [ -d ${DOWNLOAD_PATH} ] || mkdir -p ${DOWNLOAD_PATH}
+ cd ${DOWNLOAD_PATH}
+ 
+-[ -d $NUMPY_DIR ] ||
++if [ ! -d $NUMPY_DIR ]; then
+     git clone ${GIT_OPTIONS} \
+ 	-b $NUMPY_VER \
+     	--depth 1 \
+ 	https://github.com/numpy/numpy.git $NUMPY_DIR
++    (cd $NUMPY_DIR && patch -p 1 < $script_basedir/numpy.patch)
++fi
+ 
+-[ -d $SCIPY_DIR ] ||
++if [ ! -d $SCIPY_DIR ]; then
+     git clone ${GIT_OPTIONS} --recursive \
+ 	-b $SCIPY_VER \
+-    	--depth 1 \
+ 	https://github.com/scipy/scipy.git $SCIPY_DIR
++    (cd $SCIPY_DIR && git cherry-pick ${SCIPY_CHERRY_PICK})
++fi
+ 
+ [ -v fjenv_download ] && fjenv_safe_exit 0
+ 
+@@ -94,7 +98,7 @@ fi
+ 
+ # NumPy maintenance/1.22.x requires Cythone >= 0.29.21
+ # NumPy maintenance/1.22.2 requires Cythone >= 0.29.30
+-pip3 install ${PIP3_OPTIONS} 'Cython>=0.29.30' ||
++pip3 install ${PIP3_OPTIONS} 'Cython>=0.29.33,<3.0' ||
+     pip3 install ${PIP3_OPTIONS} $PIP_PACKAGE_PATH/Cython*.whl
+ 
+ cd $DOWNLOAD_PATH/$NUMPY_DIR
+@@ -107,20 +111,18 @@ fi
+ if [ "$fjenv_use_fcc" = "true" -a ! -f site.cfg ]; then
+     cat <<EOF>site.cfg
+ [openblas]
+-libraries = fjlapackexsve
+-library_dirs = $TCSDS_PATH/lib64
+-include_dirs = $TCSDS_PATH/include
+-extra_link_args = -SSL2BLAMP
++library_dirs = ${OpenBLAS_HOME}/lib
++include_dirs = ${OpenBLAS_HOME}/include
++extra_link_args = -lopenblas -lflang_rt.runtime
+ 
+ [lapack]
+-lapack_libs = fjlapackexsve
+-library_dirs = $TCSDS_PATH/lib64
+-extra_link_args = -SSL2BLAMP
++library_dirs = ${OpenBLAS_HOME}/lib
++extra_link_args = -lopenblas -lflang_rtruntime
+ EOF
+ fi
+ 
+ NPY_NUM_BUILD_JOBS=$MAX_JOBS	\
+-    python3 setup.py build -j $MAX_JOBS install
++    python3 setup.py build -j $MAX_JOBS config_fc --fcompiler=llvm install
+ 
+ #
+ # Build SciPy
+@@ -130,7 +132,7 @@ NPY_NUM_BUILD_JOBS=$MAX_JOBS	\
+ # older than what NumPy is requiring, but running for reference purpose,
+ # such as in case of using older NumPy.
+ 
+-pip3 install ${PIP3_OPTIONS} 'Cython>=0.29.18'
++pip3 install ${PIP3_OPTIONS} 'Cython>=0.29.33,<3.0'
+ pip3 install ${PIP3_OPTIONS} pybind11 pythran
+ 
+ cd $DOWNLOAD_PATH/$SCIPY_DIR
+@@ -140,7 +142,7 @@ if [ -v fjenv_rebuild ]; then
+ fi
+ 
+ SCIPY_NUM_CYTHONIZE_JOBS=$MAX_JOBS	\
+-    python3 setup.py build -j $MAX_JOBS --fcompiler=fujitsu install
++    python3 setup.py build -j $MAX_JOBS config_fc --fcompiler=llvm install
+ 
+ pip3 list | tee $script_basedir/pip3_list.txt
+ 
+diff --git a/scripts/fujitsu/5_pytorch.sh b/scripts/fujitsu/5_pytorch.sh
+index 8128e584c8..0942df8b4e 100755
+--- a/scripts/fujitsu/5_pytorch.sh
++++ b/scripts/fujitsu/5_pytorch.sh
+@@ -40,7 +40,8 @@ source $script_basedir/env.src
+ 
+ if [ -v fjenv_debug ]; then set -x; fi
+ 
+-ONEDNN_VER=v2.7
++ONEDNN_VER=v3.7.1
++GOOGLETEST_CHERRY_PICK=fa8438ae6b70c57010177de47a9f13d7041a6328
+ 
+ #
+ # Clean up
+@@ -59,8 +60,10 @@ fi
+ if [ ! -d $PYTORCH_TOP/third_party/ideep/mkl-dnn ]; then
+     cd $PYTORCH_TOP
+     git submodule update --init --recursive $GIT_OPTIONS
++    cd $PYTORCH_TOP/third_party/googletest && git cherry-pick ${GOOGLETEST_CHERRY_PICK}
++    cd $PYTORCH_TOP/third_party/tensorpipe && patch -p 1 < $script_basedir/tensorpipe.patch
+ fi
+-cd $PYTORCH_TOP/third_party/ideep/mkl-dnn/third_party/oneDNN
++cd $PYTORCH_TOP/third_party/ideep/mkl-dnn
+ git checkout $GIT_OPTIONS $ONEDNN_VER
+ 
+ [ -v fjenv_download ] && fjenv_safe_exit 0
+@@ -96,7 +99,7 @@ fi
+ 
+ # 'setup.py' in PyTorch ensures that CFLAGS is used for both C and C++ compiler,
+ # but just in case...
+-CFLAGS=-O3 CXXFLAGS=-O3 python3 setup.py build -j $MAX_JOBS install
++CFLAGS='-O3 -fopenmp' CXXFLAGS="-O3 -fopenmp" LDFLAGS="-lflang_rt.runtime" python3 setup.py build -j $MAX_JOBS install
+ 
+ pip3 list | tee $script_basedir/pip3_list.txt
+ 
+diff --git a/scripts/fujitsu/6_vision.sh b/scripts/fujitsu/6_vision.sh
+index 68034079e4..2b8aa5bc5c 100755
+--- a/scripts/fujitsu/6_vision.sh
++++ b/scripts/fujitsu/6_vision.sh
+@@ -42,9 +42,9 @@ if [ -v fjenv_debug ]; then set -x; fi
+ 
+ JPEG_ARCHIVE_NAME=jpegsrc.v9d
+ JPEG_DIR=jpeg-9d
+-PILLOW_VER=7.2.0
++PILLOW_VER=8.4.0
+ PILLOW_DIR=Pillow
+-TORCHVISION_VER=v0.14.1
++TORCHVISION_VER=v0.24.1
+ TORCHVISION_DIR=vision
+ 
+ #
+@@ -89,7 +89,6 @@ if [ ! -d $TORCHVISION_DIR ]; then
+     git clone ${GIT_OPTIONS} -b $TORCHVISION_VER \
+ 	--depth 1 \
+     	https://github.com/pytorch/vision.git
+-    (cd vision; patch -p 1 < $script_basedir/vision.patch)
+ fi
+ 
+ [ -v fjenv_download ] && fjenv_safe_exit 0
+@@ -132,7 +131,7 @@ export LDFLAGS="-Wl,-rpath,${PREFIX}/lib"
+ if [ -v fjenv_rebuild ]; then
+     python3 setup.py clean
+ fi
+-python3 setup.py install
++pip3 install . --verbose --no-build-isolation
+ 
+ #
+ # Install torchvision
+@@ -145,7 +144,7 @@ fi
+ 
+ export TORCHVISION_INCLUDE=$PREFIX/include
+ export TORCHVISION_LIBRARY=$PREFIX/lib
+-CFLAGS="-Kfast" python3 setup.py build -j $MAX_JOBS install
++pip3 install . --verbose --no-build-isolation
+ 
+ pip3 list | tee $script_basedir/pip3_list.txt
+ 
+diff --git a/scripts/fujitsu/7_horovod.sh b/scripts/fujitsu/7_horovod.sh
+index 7aa6f302b9..4e0138da0d 100755
+--- a/scripts/fujitsu/7_horovod.sh
++++ b/scripts/fujitsu/7_horovod.sh
+@@ -41,6 +41,7 @@ if [ -v fjenv_debug ]; then set -x; fi
+ 
+ HOROVOD_VER=v0.26.1
+ HOROVOD_DIR=horovod
++FLATBUFFERS_CHERRY_PICK=20aad0c41e1252b04c72111c3eb221280a9c2009
+ 
+ #
+ # Clean up
+@@ -62,6 +63,7 @@ if [ ! -d horovod ]; then
+         -b $HOROVOD_VER \
+ 	--depth 1 \
+     	https://github.com/horovod/horovod.git
++    (cd horovod/third_party/flatbuffers && git cherry-pick ${FLATBUFFERS_CHERRY_PICK})
+     (cd horovod; patch -p 1 < $script_basedir/horovod.patch)
+     cp -p horovod/examples/pytorch/pytorch_synthetic_benchmark.py $script_basedir
+ fi
+@@ -81,7 +83,7 @@ fi
+ #
+ 
+ if [ "${fjenv_use_fcc}" != "true" ]; then
+-    echo "$0 works for FCC only for now"
++    echo "$0 works for clang++ only for now"
+     exit 1
+ fi
+ 
+diff --git a/scripts/fujitsu/env.src b/scripts/fujitsu/env.src
+index 7dd81f6d6c..aee93aaff4 100644
+--- a/scripts/fujitsu/env.src
++++ b/scripts/fujitsu/env.src
+@@ -43,10 +43,21 @@ fjenv_src_sourced="Y"
+ ########################################################################
+ ########################################################################
+ 
+-#TCSDS_PATH=/opt/FJSVxtclanga/tcsds-1.2.34	# TCS (FX1000)
+-TCSDS_PATH=/opt/FJSVstclanga/cp-1.0.21.01	# CP  (FX700)
+-VENV_PATH=~/venv
+-PREFIX=~/prefix
++module purge
++. /vol0004/apps/oss/spack/share/spack/setup-env.sh
++spack load gcc@12.2.0 arch=linux-rhel8-a64fx
++module load lang/tcsds-1.2.42
++module load LLVM/llvmorg-21.1.0
++export OpenBLAS_HOME=/vol0004/apps/r/OSS_CN/llvm/openblas-omp
++export GCC_INSTALL_DIR=/vol0004/apps/oss/spack-v1.0.1/opt/spack/linux-a64fx/gcc-12.2.0-f57uyl2rzc74cow54td7bdy77xajibir/lib/gcc/aarch64-unknown-linux-gnu/12.2.0
++
++TCSDS_PATH=/opt/FJSVxtclanga/tcsds-1.2.42	# TCS (FX1000)
++#TCSDS_PATH=/opt/FJSVstclanga/cp-1.0.21.01	# CP  (FX700)
++#VENV_PATH=~/venv
++#PREFIX=~/prefix
++ROOT_DIR=$(cd $(dirname ${BASH_SOURCE:-$0})/../../..; pwd)
++VENV_PATH=$ROOT_DIR/venv
++PREFIX=$ROOT_DIR/prefix
+ 
+ ########################################################################
+ ########################################################################
+@@ -63,20 +74,24 @@ PIP_PACKAGE_PATH=${DOWNLOAD_PATH}/pip_packages
+ # MAX_JOBS should be 40 or less. (Note: TCS set this to 50 or 52)
+ : ${MAX_JOBS:=40}
+ if [ $MAX_JOBS -gt 40 ]; then MAX_JOBS=40; fi
++export MAX_JOBS=${MAX_JOBS}
+ 
+ #
+ # Env for Compilers
+ #
+ 
+ if [ "$fjenv_use_fcc" = "true" ]; then
+-    export CC="fcc -Nclang -Knolargepage"
+-    export CXX="FCC -Nclang -Knolargepage"
++    export CC="clang --gcc-install-dir=${GCC_INSTALL_DIR}"
++    export CXX="clang++ --gcc-install-dir=${GCC_INSTALL_DIR}"
++    export FC="flang"
++    export F77="flang"
++    export F90="flang"
+     export LC_ALL=C
+ fi
+ 
+ if [ ! -v fjenv_clean -a ! -v fjenv_download ]; then
+     if [ "$fjenv_use_fcc" = "true" ]; then
+-        export LD_LIBRARY_PATH=${TCSDS_PATH}/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
++        export LD_LIBRARY_PATH=${OpenBLAS_HOME}/lib:${TCSDS_PATH}/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+     fi
+     if [ ! -z "$PREFIX" ]; then
+ 	PATH=${TCSDS_PATH}/bin:${PREFIX}/bin:${PATH}
+diff --git a/scripts/fujitsu/horovod.patch b/scripts/fujitsu/horovod.patch
+index ace3ba5866..c0b1f5b63b 100644
+--- a/scripts/fujitsu/horovod.patch
++++ b/scripts/fujitsu/horovod.patch
+@@ -1,6 +1,3 @@
+-#
+-# patch for v0.26.1 (Oct-14 2022, 34604870eabd9dc670c222deb1da9acc6b9d7c03)
+-#
+ diff --git a/examples/pytorch/pytorch_synthetic_benchmark.py b/examples/pytorch/pytorch_synthetic_benchmark.py
+ index d645a20..a3c838f 100644
+ --- a/examples/pytorch/pytorch_synthetic_benchmark.py
+@@ -60,6 +57,24 @@ index d645a20..a3c838f 100644
+      loss.backward()
+      optimizer.step()
+  
++diff --git a/horovod/torch/CMakeLists.txt b/horovod/torch/CMakeLists.txt
++index eecd198..04816b5 100644
++--- a/horovod/torch/CMakeLists.txt
+++++ b/horovod/torch/CMakeLists.txt
++@@ -63,9 +63,12 @@ endif()
++ parse_version(${Pytorch_VERSION} VERSION_DEC)
++ add_definitions(-DPYTORCH_VERSION=${VERSION_DEC} -DTORCH_API_INCLUDE_EXTENSION_H=1)
++ set(Pytorch_CXX11 ${Pytorch_CXX11} PARENT_SCOPE)
++-if(NOT Pytorch_VERSION VERSION_LESS "1.5.0")
+++if(Pytorch_VERSION VERSION_GREATER_EQUAL "1.5.0" AND Pytorch_VERSION VERSION_LESS "2.0.0")
++     set(CMAKE_CXX_STANDARD 14)
++ endif()
+++if(Pytorch_VERSION VERSION_GREATER_EQUAL "2.0.0")
+++    set(CMAKE_CXX_STANDARD 17)
+++endif()
++ 
++ # PyTorch SOURCES
++ # Later versions of PyTorch that use ROCm's hipify step will rename files.
+ diff --git a/horovod/torch/mpi_ops.py b/horovod/torch/mpi_ops.py
+ index ab764c5..b78a108 100644
+ --- a/horovod/torch/mpi_ops.py
+diff --git a/scripts/fujitsu/vision.patch b/scripts/fujitsu/vision.patch
+deleted file mode 100644
+index 3a1b5da138..0000000000
+--- a/scripts/fujitsu/vision.patch
++++ /dev/null
+@@ -1,498 +0,0 @@
+-#
+-# patch for v0.14.1 (Dec-8 2022, 5e8e2f125f140d1e908cf424a6a85cacad758125)
+-#
+-diff --git a/setup.py b/setup.py
+-index 9519890..4a09c3f 100644
+---- a/setup.py
+-+++ b/setup.py
+-@@ -209,6 +209,17 @@ def get_extensions():
+-         define_macros += [("USE_PYTHON", None)]
+-         extra_compile_args["cxx"].append("/MP")
+- 
+-+    # As long as torch is utilizing OpenMP,
+-+    # FCC requires -fopenmp for all submodules even though it doesn't use OpenMP.
+-+    if torch.has_openmp:
+-+        if sys.platform == 'linux':
+-+            try:
+-+                extra_compile_args['cxx'].append('-fopenmp')
+-+            except KeyError:
+-+                extra_compile_args = {
+-+                    'cxx': ['-fopenmp']
+-+                }
+-+
+-     if debug_mode:
+-         print("Compiling in debug mode")
+-         extra_compile_args["cxx"].append("-g")
+-diff --git a/torchvision/csrc/ops/cpu/nms_kernel.cpp b/torchvision/csrc/ops/cpu/nms_kernel.cpp
+-index c54d1f0..369b6a9 100644
+---- a/torchvision/csrc/ops/cpu/nms_kernel.cpp
+-+++ b/torchvision/csrc/ops/cpu/nms_kernel.cpp
+-@@ -20,13 +20,6 @@ at::Tensor nms_kernel_impl(
+-   if (dets.numel() == 0)
+-     return at::empty({0}, dets.options().dtype(at::kLong));
+- 
+--  auto x1_t = dets.select(1, 0).contiguous();
+--  auto y1_t = dets.select(1, 1).contiguous();
+--  auto x2_t = dets.select(1, 2).contiguous();
+--  auto y2_t = dets.select(1, 3).contiguous();
+--
+--  at::Tensor areas_t = (x2_t - x1_t) * (y2_t - y1_t);
+--
+-   auto order_t = std::get<1>(
+-       scores.sort(/*stable=*/true, /*dim=*/0, /* descending=*/true));
+- 
+-@@ -34,6 +27,15 @@ at::Tensor nms_kernel_impl(
+-   at::Tensor suppressed_t = at::zeros({ndets}, dets.options().dtype(at::kByte));
+-   at::Tensor keep_t = at::zeros({ndets}, dets.options().dtype(at::kLong));
+- 
+-+  auto dets_sorted = dets.index_select(0, order_t);
+-+
+-+  auto x1_t = dets_sorted.select(1, 0).contiguous();
+-+  auto y1_t = dets_sorted.select(1, 1).contiguous();
+-+  auto x2_t = dets_sorted.select(1, 2).contiguous();
+-+  auto y2_t = dets_sorted.select(1, 3).contiguous();
+-+
+-+  at::Tensor areas_t = (x2_t - x1_t) * (y2_t - y1_t);
+-+
+-   auto suppressed = suppressed_t.data_ptr<uint8_t>();
+-   auto keep = keep_t.data_ptr<int64_t>();
+-   auto order = order_t.data_ptr<int64_t>();
+-@@ -45,19 +47,16 @@ at::Tensor nms_kernel_impl(
+- 
+-   int64_t num_to_keep = 0;
+- 
+--  for (int64_t _i = 0; _i < ndets; _i++) {
+--    auto i = order[_i];
+-+  for (int64_t i = 0; i < ndets; i++) {
+-     if (suppressed[i] == 1)
+-       continue;
+--    keep[num_to_keep++] = i;
+-     auto ix1 = x1[i];
+-     auto iy1 = y1[i];
+-     auto ix2 = x2[i];
+-     auto iy2 = y2[i];
+-     auto iarea = areas[i];
+- 
+--    for (int64_t _j = _i + 1; _j < ndets; _j++) {
+--      auto j = order[_j];
+-+    for (int64_t j = i + 1; j < ndets; j++) {
+-       if (suppressed[j] == 1)
+-         continue;
+-       auto xx1 = std::max(ix1, x1[j]);
+-@@ -73,6 +72,11 @@ at::Tensor nms_kernel_impl(
+-         suppressed[j] = 1;
+-     }
+-   }
+-+  for (int64_t i = 0; i < ndets; i++) {
+-+    if (suppressed[i] == 1)
+-+      continue;
+-+    keep[num_to_keep++] = order[i];
+-+  }
+-   return keep_t.narrow(/*dim=*/0, /*start=*/0, /*length=*/num_to_keep);
+- }
+- 
+-diff --git a/torchvision/csrc/ops/cpu/roi_align_kernel.cpp b/torchvision/csrc/ops/cpu/roi_align_kernel.cpp
+-index e6684e9..d4c6b0e 100644
+---- a/torchvision/csrc/ops/cpu/roi_align_kernel.cpp
+-+++ b/torchvision/csrc/ops/cpu/roi_align_kernel.cpp
+-@@ -1,4 +1,5 @@
+- #include <ATen/ATen.h>
+-+#include <ATen/Parallel.h>
+- #include <torch/library.h>
+- 
+- #include "./roi_align_common.h"
+-@@ -24,87 +25,89 @@ void roi_align_forward_kernel_impl(
+-     T* output) {
+-   // (n, c, ph, pw) is an element in the pooled output
+-   // can be parallelized using omp
+--  // #pragma omp parallel for num_threads(32)
+--  for (int n = 0; n < n_rois; n++) {
+--    int index_n = n * channels * pooled_width * pooled_height;
+--
+--    const T* offset_rois = rois + n * 5;
+--    int roi_batch_ind = offset_rois[0];
+--
+--    // Do not using rounding; this implementation detail is critical
+--    T offset = aligned ? (T)0.5 : (T)0.0;
+--    T roi_start_w = offset_rois[1] * spatial_scale - offset;
+--    T roi_start_h = offset_rois[2] * spatial_scale - offset;
+--    T roi_end_w = offset_rois[3] * spatial_scale - offset;
+--    T roi_end_h = offset_rois[4] * spatial_scale - offset;
+--
+--    T roi_width = roi_end_w - roi_start_w;
+--    T roi_height = roi_end_h - roi_start_h;
+--    if (!aligned) {
+--      // Force malformed ROIs to be 1x1
+--      roi_width = std::max(roi_width, (T)1.);
+--      roi_height = std::max(roi_height, (T)1.);
+--    }
+--
+--    T bin_size_h = static_cast<T>(roi_height) / static_cast<T>(pooled_height);
+--    T bin_size_w = static_cast<T>(roi_width) / static_cast<T>(pooled_width);
+--
+--    // We use roi_bin_grid to sample the grid and mimic integral
+--    int roi_bin_grid_h = (sampling_ratio > 0)
+--        ? sampling_ratio
+--        : ceil(roi_height / pooled_height); // e.g., = 2
+--    int roi_bin_grid_w =
+--        (sampling_ratio > 0) ? sampling_ratio : ceil(roi_width / pooled_width);
+--
+--    // We do average (integral) pooling inside a bin
+--    // When the grid is empty, output zeros.
+--    const T count = std::max(roi_bin_grid_h * roi_bin_grid_w, 1); // e.g. = 4
+--
+--    // we want to precalculate indices and weights shared by all chanels,
+--    // this is the key point of optimization
+--    std::vector<detail::PreCalc<T>> pre_calc(
+--        roi_bin_grid_h * roi_bin_grid_w * pooled_width * pooled_height);
+--    detail::pre_calc_for_bilinear_interpolate(
+--        height,
+--        width,
+--        pooled_height,
+--        pooled_width,
+--        roi_start_h,
+--        roi_start_w,
+--        bin_size_h,
+--        bin_size_w,
+--        roi_bin_grid_h,
+--        roi_bin_grid_w,
+--        pre_calc);
+--
+--    for (int c = 0; c < channels; c++) {
+--      int index_n_c = index_n + c * pooled_width * pooled_height;
+--      const T* offset_input =
+--          input + (roi_batch_ind * channels + c) * height * width;
+--      int pre_calc_index = 0;
+--
+--      for (int ph = 0; ph < pooled_height; ph++) {
+--        for (int pw = 0; pw < pooled_width; pw++) {
+--          int index = index_n_c + ph * pooled_width + pw;
+--
+--          T output_val = 0.;
+--          for (int iy = 0; iy < roi_bin_grid_h; iy++) {
+--            for (int ix = 0; ix < roi_bin_grid_w; ix++) {
+--              detail::PreCalc<T> pc = pre_calc[pre_calc_index];
+--              output_val += pc.w1 * offset_input[pc.pos1] +
+--                  pc.w2 * offset_input[pc.pos2] +
+--                  pc.w3 * offset_input[pc.pos3] + pc.w4 * offset_input[pc.pos4];
+--
+--              pre_calc_index += 1;
+--            }
+--          }
+--          output_val /= count; // Average pooling
+--
+--          output[index] = output_val;
+--        } // for pw
+--      } // for ph
+--    } // for c
+--  } // for n
+-+  int grain_size = ceil(n_rois / at::get_num_threads());
+-+  at::parallel_for(0, n_rois, grain_size, [&](int64_t start, int64_t end) {
+-+    for (int n = start; n < end; n++) {
+-+      int index_n = n * channels * pooled_width * pooled_height;
+-+
+-+      const T* offset_rois = rois + n * 5;
+-+      int roi_batch_ind = offset_rois[0];
+-+
+-+      // Do not using rounding; this implementation detail is critical
+-+      T offset = aligned ? (T)0.5 : (T)0.0;
+-+      T roi_start_w = offset_rois[1] * spatial_scale - offset;
+-+      T roi_start_h = offset_rois[2] * spatial_scale - offset;
+-+      T roi_end_w = offset_rois[3] * spatial_scale - offset;
+-+      T roi_end_h = offset_rois[4] * spatial_scale - offset;
+-+
+-+      T roi_width = roi_end_w - roi_start_w;
+-+      T roi_height = roi_end_h - roi_start_h;
+-+      if (!aligned) {
+-+	// Force malformed ROIs to be 1x1
+-+	roi_width = std::max(roi_width, (T)1.);
+-+	roi_height = std::max(roi_height, (T)1.);
+-+      }
+-+
+-+      T bin_size_h = static_cast<T>(roi_height) / static_cast<T>(pooled_height);
+-+      T bin_size_w = static_cast<T>(roi_width) / static_cast<T>(pooled_width);
+-+
+-+      // We use roi_bin_grid to sample the grid and mimic integral
+-+      int roi_bin_grid_h = (sampling_ratio > 0)
+-+          ? sampling_ratio
+-+          : ceil(roi_height / pooled_height); // e.g., = 2
+-+      int roi_bin_grid_w =
+-+          (sampling_ratio > 0) ? sampling_ratio : ceil(roi_width / pooled_width);
+-+
+-+      // We do average (integral) pooling inside a bin
+-+      // When the grid is empty, output zeros.
+-+      const T count = std::max(roi_bin_grid_h * roi_bin_grid_w, 1); // e.g. = 4
+-+
+-+      // we want to precalculate indices and weights shared by all chanels,
+-+      // this is the key point of optimization
+-+      std::vector<detail::PreCalc<T>> pre_calc(
+-+          roi_bin_grid_h * roi_bin_grid_w * pooled_width * pooled_height);
+-+      detail::pre_calc_for_bilinear_interpolate(
+-+          height,
+-+          width,
+-+          pooled_height,
+-+          pooled_width,
+-+          roi_start_h,
+-+          roi_start_w,
+-+          bin_size_h,
+-+          bin_size_w,
+-+          roi_bin_grid_h,
+-+          roi_bin_grid_w,
+-+          pre_calc);
+-+
+-+      for (int c = 0; c < channels; c++) {
+-+	int index_n_c = index_n + c * pooled_width * pooled_height;
+-+	const T* offset_input =
+-+            input + (roi_batch_ind * channels + c) * height * width;
+-+	int pre_calc_index = 0;
+-+
+-+	for (int ph = 0; ph < pooled_height; ph++) {
+-+	  for (int pw = 0; pw < pooled_width; pw++) {
+-+	    int index = index_n_c + ph * pooled_width + pw;
+-+
+-+	    T output_val = 0.;
+-+	    for (int iy = 0; iy < roi_bin_grid_h; iy++) {
+-+	      for (int ix = 0; ix < roi_bin_grid_w; ix++) {
+-+		detail::PreCalc<T> pc = pre_calc[pre_calc_index];
+-+		output_val += pc.w1 * offset_input[pc.pos1] +
+-+                    pc.w2 * offset_input[pc.pos2] +
+-+                    pc.w3 * offset_input[pc.pos3] + pc.w4 * offset_input[pc.pos4];
+-+
+-+		pre_calc_index += 1;
+-+	      }
+-+	    }
+-+	    output_val /= count; // Average pooling
+-+
+-+	    output[index] = output_val;
+-+	  } // for pw
+-+	} // for ph
+-+      } // for c
+-+    } // for n
+-+  });
+- }
+- 
+- template <typename T>
+-@@ -183,100 +186,105 @@ void roi_align_backward_kernel_impl(
+-     int pooled_width,
+-     int sampling_ratio,
+-     bool aligned,
+--    T* grad_input,
+-+    const int64_t grad_input_size,
+-+    T* grad_input_buffer,
+-     const T* rois,
+-     int n_stride,
+-     int c_stride,
+-     int h_stride,
+-     int w_stride) {
+--  for (int index = 0; index < nthreads; index++) {
+--    // (n, c, ph, pw) is an element in the pooled output
+--    int pw = index % pooled_width;
+--    int ph = (index / pooled_width) % pooled_height;
+--    int c = (index / pooled_width / pooled_height) % channels;
+--    int n = index / pooled_width / pooled_height / channels;
+--
+--    const T* offset_rois = rois + n * 5;
+--    int roi_batch_ind = offset_rois[0];
+--
+--    // Do not using rounding; this implementation detail is critical
+--    T offset = aligned ? (T)0.5 : (T)0.0;
+--    T roi_start_w = offset_rois[1] * spatial_scale - offset;
+--    T roi_start_h = offset_rois[2] * spatial_scale - offset;
+--    T roi_end_w = offset_rois[3] * spatial_scale - offset;
+--    T roi_end_h = offset_rois[4] * spatial_scale - offset;
+--
+--    T roi_width = roi_end_w - roi_start_w;
+--    T roi_height = roi_end_h - roi_start_h;
+--    if (!aligned) {
+--      // Force malformed ROIs to be 1x1
+--      roi_width = std::max(roi_width, (T)1.);
+--      roi_height = std::max(roi_height, (T)1.);
+--    }
+--
+--    T bin_size_h = static_cast<T>(roi_height) / static_cast<T>(pooled_height);
+--    T bin_size_w = static_cast<T>(roi_width) / static_cast<T>(pooled_width);
+--
+--    T* offset_grad_input =
+--        grad_input + ((roi_batch_ind * channels + c) * height * width);
+--
+--    int output_offset = n * n_stride + c * c_stride;
+--    const T* offset_grad_output = grad_output + output_offset;
+--    const T grad_output_this_bin =
+--        offset_grad_output[ph * h_stride + pw * w_stride];
+--
+--    // We use roi_bin_grid to sample the grid and mimic integral
+--    int roi_bin_grid_h = (sampling_ratio > 0)
+--        ? sampling_ratio
+--        : ceil(roi_height / pooled_height); // e.g., = 2
+--    int roi_bin_grid_w =
+--        (sampling_ratio > 0) ? sampling_ratio : ceil(roi_width / pooled_width);
+--
+--    // We do average (integral) pooling inside a bin
+--    const T count = roi_bin_grid_h * roi_bin_grid_w; // e.g. = 4
+--
+--    for (int iy = 0; iy < roi_bin_grid_h; iy++) {
+--      const T y = roi_start_h + ph * bin_size_h +
+--          static_cast<T>(iy + .5f) * bin_size_h /
+--              static_cast<T>(roi_bin_grid_h); // e.g., 0.5, 1.5
+--      for (int ix = 0; ix < roi_bin_grid_w; ix++) {
+--        const T x = roi_start_w + pw * bin_size_w +
+--            static_cast<T>(ix + .5f) * bin_size_w /
+--                static_cast<T>(roi_bin_grid_w);
+--
+--        T w1, w2, w3, w4;
+--        int x_low, x_high, y_low, y_high;
+--
+--        bilinear_interpolate_gradient(
+--            height,
+--            width,
+--            y,
+--            x,
+--            w1,
+--            w2,
+--            w3,
+--            w4,
+--            x_low,
+--            x_high,
+--            y_low,
+--            y_high,
+--            index);
+--
+--        T g1 = grad_output_this_bin * w1 / count;
+--        T g2 = grad_output_this_bin * w2 / count;
+--        T g3 = grad_output_this_bin * w3 / count;
+--        T g4 = grad_output_this_bin * w4 / count;
+--
+--        if (x_low >= 0 && x_high >= 0 && y_low >= 0 && y_high >= 0) {
+--          // atomic add is not needed for now since it is single threaded
+--          add(offset_grad_input + y_low * width + x_low, static_cast<T>(g1));
+--          add(offset_grad_input + y_low * width + x_high, static_cast<T>(g2));
+--          add(offset_grad_input + y_high * width + x_low, static_cast<T>(g3));
+--          add(offset_grad_input + y_high * width + x_high, static_cast<T>(g4));
+--        } // if
+--      } // ix
+--    } // iy
+--  } // for
+-+  int grain_size = ceil(nthreads / at::get_num_threads());
+-+  at::parallel_for(0, nthreads, grain_size, [&](int64_t start, int64_t end) {
+-+    for (int index = start; index < end; index++) {
+-+      int thread_no = at::get_thread_num();
+-+      // (n, c, ph, pw) is an element in the pooled output
+-+      int pw = index % pooled_width;
+-+      int ph = (index / pooled_width) % pooled_height;
+-+      int c = (index / pooled_width / pooled_height) % channels;
+-+      int n = index / pooled_width / pooled_height / channels;
+-+
+-+      const T* offset_rois = rois + n * 5;
+-+      int roi_batch_ind = offset_rois[0];
+-+
+-+      // Do not using rounding; this implementation detail is critical
+-+      T offset = aligned ? (T)0.5 : (T)0.0;
+-+      T roi_start_w = offset_rois[1] * spatial_scale - offset;
+-+      T roi_start_h = offset_rois[2] * spatial_scale - offset;
+-+      T roi_end_w = offset_rois[3] * spatial_scale - offset;
+-+      T roi_end_h = offset_rois[4] * spatial_scale - offset;
+-+
+-+      T roi_width = roi_end_w - roi_start_w;
+-+      T roi_height = roi_end_h - roi_start_h;
+-+      if (!aligned) {
+-+	// Force malformed ROIs to be 1x1
+-+	roi_width = std::max(roi_width, (T)1.);
+-+	roi_height = std::max(roi_height, (T)1.);
+-+      }
+-+
+-+      T bin_size_h = static_cast<T>(roi_height) / static_cast<T>(pooled_height);
+-+      T bin_size_w = static_cast<T>(roi_width) / static_cast<T>(pooled_width);
+-+
+-+      T* offset_grad_input = grad_input_buffer + (thread_no * grad_input_size) +
+-+        ((roi_batch_ind * channels + c) * height * width);
+-+
+-+      int output_offset = n * n_stride + c * c_stride;
+-+      const T* offset_grad_output = grad_output + output_offset;
+-+      const T grad_output_this_bin =
+-+          offset_grad_output[ph * h_stride + pw * w_stride];
+-+
+-+      // We use roi_bin_grid to sample the grid and mimic integral
+-+      int roi_bin_grid_h = (sampling_ratio > 0)
+-+          ? sampling_ratio
+-+          : ceil(roi_height / pooled_height); // e.g., = 2
+-+      int roi_bin_grid_w =
+-+          (sampling_ratio > 0) ? sampling_ratio : ceil(roi_width / pooled_width);
+-+
+-+      // We do average (integral) pooling inside a bin
+-+      const T count = roi_bin_grid_h * roi_bin_grid_w; // e.g. = 4
+-+
+-+      for (int iy = 0; iy < roi_bin_grid_h; iy++) {
+-+	const T y = roi_start_h + ph * bin_size_h +
+-+            static_cast<T>(iy + .5f) * bin_size_h /
+-+                static_cast<T>(roi_bin_grid_h); // e.g., 0.5, 1.5
+-+	for (int ix = 0; ix < roi_bin_grid_w; ix++) {
+-+	  const T x = roi_start_w + pw * bin_size_w +
+-+              static_cast<T>(ix + .5f) * bin_size_w /
+-+                  static_cast<T>(roi_bin_grid_w);
+-+
+-+	  T w1, w2, w3, w4;
+-+	  int x_low, x_high, y_low, y_high;
+-+
+-+	  bilinear_interpolate_gradient(
+-+              height,
+-+              width,
+-+              y,
+-+              x,
+-+              w1,
+-+              w2,
+-+              w3,
+-+              w4,
+-+              x_low,
+-+              x_high,
+-+              y_low,
+-+              y_high,
+-+              index);
+-+
+-+	  T g1 = grad_output_this_bin * w1 / count;
+-+	  T g2 = grad_output_this_bin * w2 / count;
+-+	  T g3 = grad_output_this_bin * w3 / count;
+-+	  T g4 = grad_output_this_bin * w4 / count;
+-+
+-+	  if (x_low >= 0 && x_high >= 0 && y_low >= 0 && y_high >= 0) {
+-+	    // atomic add is not needed for now since it is single threaded
+-+	    add(offset_grad_input + y_low * width + x_low, static_cast<T>(g1));
+-+	    add(offset_grad_input + y_low * width + x_high, static_cast<T>(g2));
+-+	    add(offset_grad_input + y_high * width + x_low, static_cast<T>(g3));
+-+	    add(offset_grad_input + y_high * width + x_high, static_cast<T>(g4));
+-+	  } // if
+-+	} // ix
+-+      } // iy
+-+    } // for
+-+  });
+- }
+- 
+- at::Tensor roi_align_forward_kernel(
+-@@ -355,6 +363,9 @@ at::Tensor roi_align_backward_kernel(
+-     return grad_input;
+-   }
+- 
+-+  const int num_threads = at::get_num_threads();
+-+  at::Tensor grad_input_buffer =
+-+    at::zeros({num_threads, batch_size, channels, height, width}, grad.options());
+-   // get stride values to ensure indexing into gradients is correct.
+-   int n_stride = grad.stride(0);
+-   int c_stride = grad.stride(1);
+-@@ -375,13 +386,17 @@ at::Tensor roi_align_backward_kernel(
+-             pooled_width,
+-             sampling_ratio,
+-             aligned,
+--            grad_input.data_ptr<scalar_t>(),
+-+	    grad_input.numel(),
+-+	    grad_input_buffer.data_ptr<scalar_t>(),
+-             rois_.data_ptr<scalar_t>(),
+-             n_stride,
+-             c_stride,
+-             h_stride,
+-             w_stride);
+-       });
+-+  for (int64_t i = 0; i < num_threads; ++i) {
+-+    grad_input.add_(grad_input_buffer.select(0, i));
+-+  }
+-   return grad_input;
+- }
+- 
+diff --git a/test/cpp/c10d/CMakeLists.txt b/test/cpp/c10d/CMakeLists.txt
+index 285a5dd2a7..387d54835a 100644
+--- a/test/cpp/c10d/CMakeLists.txt
++++ b/test/cpp/c10d/CMakeLists.txt
+@@ -20,6 +20,8 @@ function(c10d_add_test test_src)
+       $<BUILD_INTERFACE:${TORCH_SRC_DIR}/csrc/distributed>
+       $<TARGET_PROPERTY:fmt::fmt-header-only,INTERFACE_INCLUDE_DIRECTORIES>
+   )
++  target_include_directories(${test_name} PRIVATE ${MPI_CXX_INCLUDE_PATH})
++  target_link_libraries(${test_name} PRIVATE ${MPI_CXX_LIBRARIES})
+   target_link_libraries(${test_name} PRIVATE
+     fmt::fmt-header-only
+     ${ARG_LINK_LIBRARIES}
+@@ -83,7 +85,7 @@ if(USE_MPI AND USE_C10D_MPI)
+   # private headers of libtorch, which in turn include MPI. As a hacky
+   # alternative to making MPI a public dependency of libtorch, we make it
+   # a private dependency of the tests as well.
+-  c10d_add_test(ProcessGroupMPITest.cpp LINK_LIBRARIES torch_cpu MPI::MPI_CXX INSTALL_TEST ${INSTALL_TEST})
++  c10d_add_test(ProcessGroupMPITest.cpp LINK_LIBRARIES torch_cpu ${MPI_CXX_LIBRARIES} INSTALL_TEST ${INSTALL_TEST})
+ endif()
+ 
+ if(LINUX AND USE_GLOO AND USE_C10D_GLOO)
+diff --git a/test/cpp/nativert/CMakeLists.txt b/test/cpp/nativert/CMakeLists.txt
+index 1b4752ed90..39a0f187bc 100644
+--- a/test/cpp/nativert/CMakeLists.txt
++++ b/test/cpp/nativert/CMakeLists.txt
+@@ -62,6 +62,7 @@ set(NATIVERT_TEST_DEPENDENCIES torch gtest_main)
+ 
+ target_link_libraries(test_nativert PRIVATE ${NATIVERT_TEST_DEPENDENCIES})
+ target_link_libraries(test_nativert PRIVATE fmt::fmt-header-only)
++target_link_libraries(test_nativert PRIVATE -ldl)
+ target_include_directories(test_nativert PRIVATE ${ATen_CPU_INCLUDE})
+ 
+ if(USE_CUDA)
+diff --git a/torch/CMakeLists.txt b/torch/CMakeLists.txt
+index 1632147f02..3fa6ec87fd 100644
+--- a/torch/CMakeLists.txt
++++ b/torch/CMakeLists.txt
+@@ -294,7 +294,8 @@ if(USE_DISTRIBUTED)
+     endif()
+     # Same for MPI.
+     if(USE_MPI)
+-      list(APPEND TORCH_PYTHON_LINK_LIBRARIES MPI::MPI_CXX)
++      list(APPEND TORCH_PYTHON_LINK_LIBRARIES ${MPI_CXX_LIBRARIES})
++      list(APPEND TORCH_PYTHON_INCLUDE_DIRECTORIES ${MPI_CXX_INCLUDE_PATH})
+     endif()
+     list(APPEND TORCH_PYTHON_COMPILE_DEFINITIONS USE_C10D)
+ 
