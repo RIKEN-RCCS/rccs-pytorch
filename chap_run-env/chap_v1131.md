@@ -1,0 +1,12 @@
+:::: {.body role="main"}
+::: {#pytorch-v1-13-1 .section}
+# PyTorch v1.13.1[¶](#pytorch-v1-13-1 "Link to this heading"){.headerlink}
+
+実行環境については、PyTorch v2.9.1と同様の手順で作成を行った。 PyTorch
+v1.13.1では、シングルプロセス学習においてmkltensorに対応できるため、
+test_train.pyに与えている実行時オプションとして、mkltensorとcpu_nomklの2通りを実行した。
+また、マルチプロセス学習においてもoneDNNに対応する。
+そのため、Pythonプログラムpytorch_synthetic_benchmark.py
+をv2.1以降と同様に修正した場合と修正しない場合の2通りを実行した。
+:::
+::::
