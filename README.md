@@ -1,14 +1,14 @@
-# Riken-pytorch documentation<a href="#riken-pytorch-documentation" class="headerlink" title="Link to this heading">¶</a>
+# rccs-pytorch<a href="#rccs-pytorch" class="headerlink" title="Link to this heading">¶</a>
+
+「富岳」向けPyTorch
+v2.9.1に対するサンプル問題(Resnet)の動作環境の構築と性能確認、及び従来バージョンとの性能比較について述べる。
 
 ## Branches
 - [Ver.2.1  : https://github.com/RIKEN-RCCS/rccs-pytorch/tree/r2.1_for_a64fx](https://github.com/RIKEN-RCCS/rccs-pytorch/tree/r2.1_for_a64fx)
 - [Ver.2.3.1: https://github.com/RIKEN-RCCS/rccs-pytorch/tree/r2.3.1_for_a64fx](https://github.com/RIKEN-RCCS/rccs-pytorch/tree/r2.3.1_for_a64fx)
 - [Ver.2.9.1: https://github.com/RIKEN-RCCS/rccs-pytorch/tree/r2.9.1_for_a64fx](https://github.com/RIKEN-RCCS/rccs-pytorch/tree/r2.9.1_for_a64fx)
 
-「富岳」向けPyTorch
-v2.9.1に対するサンプル問題(Resnet)の動作環境の構築と性能確認、及び従来バージョンとの性能比較について述べる。
-
-<span class="caption-text">Contents:</span>
+## Contents
 
 - <a href="chap_build_prepare/prepare.md"
   class="reference internal">ビルド環境の整備</a>
