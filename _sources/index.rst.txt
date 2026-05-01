@@ -1,0 +1,18 @@
+.. Riken-pytorch documentation master file, created by
+   sphinx-quickstart on Thu Mar 13 13:42:53 2025.
+   You can adapt this file completely to your liking, but it should at least
+   contain the root `toctree` directive.
+
+Riken-pytorch documentation
+===========================
+
+「富岳」向けPyTorch v2.9.1に対するサンプル問題(Resnet)の動作環境の構築と性能確認、及び従来バージョンとの性能比較について述べる。
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Contents:
+
+   ./chap_build_prepare/prepare
+   ./chap_build/build
+   ./chap_run-env/resnet
+   ./chap_perf/perf
