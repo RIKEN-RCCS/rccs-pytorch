@@ -1,28 +1,17 @@
-:::::::: {.body role="main"}
-::::::: {#pytorch-v1-13-1 .section}
-# PyTorch v1.13.1[¶](#pytorch-v1-13-1 "Link to this heading"){.headerlink}
+# PyTorch v1.13.1<a href="#pytorch-v1-13-1" class="headerlink"
+title="Link to this heading">¶</a>
 
-Pytorch v1.13.1の「富岳」向けビルドでは、富士通Githubで公開されている"
+Pytorch v1.13.1の「富岳」向けビルドでは、富士通Githubで公開されている”
 富士通 Supercomputer PRIMEHPC FX1000/FX700 上の PyTorch
-構築手順"から入手可能なPytorch
+構築手順”から入手可能なPytorch
 v1.13.1向けのビルド用スクリプトに対し必要な修正を施したものを利用した。言語環境としては、富士通製tcsds-1.2.42を用いた。
 
 1.  富士通GithubからPyTorchをクローンする。
 
-:::: {.highlight-default .notranslate}
-::: highlight
     $ git clone https://github.com/fujitsu/pytorch.git -b r1.13_for_a64fx
-:::
-::::
 
-2.  pytorchに対するパッチを適用する。
+1.  pytorchに対するパッチを適用する。
 
-:::: {.highlight-default .notranslate}
-::: highlight
     $ PYTORCH_TOP=$(cd $(dirname ${BASH_SOURCE:-$0})/pytorch && pwd)
     $ PATCH_DIR=$(cd $(dirname ${BASH_SOURCE:-$0})/patch && pwd)
     $ cd ${PYTORCH_TOP} && patch -p 1 < ${PATCH_DIR}/pytorch.patch
-:::
-::::
-:::::::
-::::::::

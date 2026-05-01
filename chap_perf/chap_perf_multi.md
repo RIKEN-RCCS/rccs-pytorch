@@ -1,6 +1,4 @@
-:::: {.body role="main"}
-::: {#id1 .section}
-# マルチプロセスの性能比較[¶](#id1 "Link to this heading"){.headerlink}
+# マルチプロセスの性能比較<a href="#id1" class="headerlink" title="Link to this heading">¶</a>
 
 マルチプロセスでResnetを実行したときの学習と推論の性能を比較する。学習については、
 使用したPythonスクリプトの出力がプロセスあたりの処理速度(Img/sec)となっているため、その値を用いる。
@@ -28,5 +26,3 @@ alt="../_images/Resnet-eval-multi_comp.png" /></a>
 19.1.4)はv2.3.1に比べ、1.1倍程度性能が悪い結果となっている。 v2.9.1(llvm
 21.1.0)はv2.3.1と同程度の性能となっている。
 なお、マルチプロセス学習においてはマルチプロセス実行のためにhorovodを利用している。horovodは最近数年間バージョンアップが無く、最近のPyTorchを考慮していない。これが性能低下の原因になった可能性がある。
-:::
-::::

@@ -1,11 +1,8 @@
-:::::::: {.body role="main"}
-::::::: {#pytorch-v2-1 .section}
-# PyTorch v2.1[¶](#pytorch-v2-1 "Link to this heading"){.headerlink}
+# PyTorch v2.1<a href="#pytorch-v2-1" class="headerlink"
+title="Link to this heading">¶</a>
 
 ビルド環境の整備後、計算ノード上にて以下のように実行する。なお、すべてのscriptを実行するのには9時間程度を要する。
 
-:::: {.highlight-default .notranslate}
-::: highlight
     $ cd ${PYTORCH_TOP}/scripts/fujitsu
     $ . ./env.src
     $ bash 1_python.sh
@@ -15,14 +12,10 @@
     $ bash 6_vision.sh
     $ bash 7_horovod.sh
     $ bash 8_libtcmalloc.sh
-:::
-::::
 
 ビルド用のスクリプトの実行後に出力されるpip3
-list(pip3_list.txt)の内容を示す。
+list(pip3\_list.txt)の内容を示す。
 
-:::: {.highlight-default .notranslate}
-::: highlight
     Package            Version
     ------------------ ------------------
     astunparse         1.6.3
@@ -72,7 +65,3 @@ list(pip3_list.txt)の内容を示す。
     typing_extensions  4.15.0
     urllib3            2.6.3
     wheel              0.45.1
-:::
-::::
-:::::::
-::::::::

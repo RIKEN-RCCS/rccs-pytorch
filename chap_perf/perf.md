@@ -1,12 +1,7 @@
-::::: {.body role="main"}
-:::: {#id1 .section}
-# バージョン間の性能比較[¶](#id1 "Link to this heading"){.headerlink}
+# バージョン間の性能比較<a href="#id1" class="headerlink" title="Link to this heading">¶</a>
 
-::: {.toctree-wrapper .compound}
-- [Resnetの実行](chap_run.md){.reference .internal}
-- [シングルプロセスの性能比較](chap_perf_single.md){.reference
-  .internal}
-- [マルチプロセスの性能比較](chap_perf_multi.md){.reference .internal}
-:::
-::::
-:::::
+- <a href="chap_run.md" class="reference internal">Resnetの実行</a>
+- <a href="chap_perf_single.md"
+  class="reference internal">シングルプロセスの性能比較</a>
+- <a href="chap_perf_multi.md"
+  class="reference internal">マルチプロセスの性能比較</a>
